@@ -18,7 +18,6 @@ from logger import WARNING
 from logger import ERROR
 from logger import CRITICAL
 
-import pandas as pd
 import warnings
 from pathlib import Path
 
@@ -38,6 +37,72 @@ def dict_to_list(dicts):
 def blank_list(size):
     list =  [''] * size + ['\n']
     return list
+
+def read_excel_index(filename):
+    """
+    Reads a CSV/XLS/XLSX file and returns a dict indexed by 'RACS Asset ID'.
+    Skips rows with missing or blank 'RACS Asset ID'.
+    """
+    import os
+    import sys
+    import warnings
+    import pandas as pd
+
+    logger(DEBUG, f"Reading file as indexed dict: {filename}")
+    try:
+        suffix = os.path.splitext(filename)[1].lower()
+
+        # ─── CSV PATH ─────────────────────────────────────────────────────────────
+        if suffix == ".csv":
+            for enc in ("utf-8", "latin-1", "ISO-8859-1"):
+                try:
+                    df = pd.read_csv(filename, dtype=str, skipinitialspace=True, encoding=enc).fillna("")
+                    logger(DEBUG, f"Loaded CSV with encoding {enc}")
+                    break
+                except UnicodeDecodeError:
+                    logger(DEBUG, f"Reading {filename} :: Trying encoding {enc}")
+            else:
+                logger(ERROR, f"All CSV encodings failed for {filename}")
+                sys.exit(2)
+                return None
+
+        # ─── EXCEL PATH ───────────────────────────────────────────────────────────
+        elif suffix in (".xls", ".xlsx"):
+            warnings.filterwarnings(
+                "ignore",
+                category=UserWarning,
+                module="openpyxl.styles.stylesheet",
+            )
+            df = (
+                pd.read_excel(filename, sheet_name=0, dtype=str)
+                  .fillna("")
+            )
+
+        # ─── UNSUPPORTED ──────────────────────────────────────────────────────────
+        else:
+            logger(DEBUG, f"Unsupported file type: {suffix}")
+            return None
+
+        # ─── CLEANUP ──────────────────────────────────────────────────────────────
+        df.columns = df.columns.str.strip()
+        df = df.apply(lambda v: v.str.strip() if v.dtype == "object" else v)
+
+        # ─── INDEXING BY RACS Asset ID ────────────────────────────────────────────
+        if "RACS Asset ID" not in df.columns:
+            logger(ERROR, f"'RACS Asset ID' column missing in {filename}")
+            return None
+
+        indexed = {}
+        for row in df.to_dict(orient="records"):
+            key = row.get("RACS Asset ID", "").strip()
+            if key:
+                indexed[key] = row
+
+        return indexed
+
+    except FileNotFoundError:
+        logger(DEBUG, f"File not found: {filename}")
+        return None
 
 ####
 ## Function to manage reading a spread sheet into a dict
