@@ -48,6 +48,9 @@ def read_excel_index(filename):
     import warnings
     import pandas as pd
 
+    added_rows = 0
+    dropped_rows = 0
+
     logger(DEBUG, f"Reading file as indexed dict: {filename}")
     try:
         suffix = os.path.splitext(filename)[1].lower()
@@ -96,8 +99,12 @@ def read_excel_index(filename):
         for row in df.to_dict(orient="records"):
             key = row.get("RACS Asset ID", "").strip()
             if key:
+                added_rows += 1
                 indexed[key] = row
+            else:
+                dropped_rows += 1
 
+        logger(DEBUG, f"Reading {filename} :: Rows:{added_rows} :: Dropped:{dropped_rows}")
         return indexed
 
     except FileNotFoundError:
